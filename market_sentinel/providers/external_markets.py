@@ -88,13 +88,45 @@ class ExternalMarketsProvider:
     @classmethod
     def _parse_indian_gold(cls, html: str) -> ExternalMarketQuote | None:
         text = cls._clean_text(html)
-        match = re.search(r"24K\s+Gold\s*/\s*g\s*₹\s*([\d,]+)\s*([+-])\s*([\d,]+)", text, re.I)
+
+        match = re.search(
+            r"24K[\s\xa0]*Gold[\s\xa0]*/[\s\xa0]*g"
+            r"[\s\xa0]*₹[\s\xa0]*([\d,]+)"
+            r"[\s\xa0]*([+-])[\s\xa0]*([\d,]+)",
+            text,
+            re.I,
+        )
+
         if not match:
+            logger.warning("Unable to parse India 24K gold rate from Goodreturns")
             return None
-        per_gram = float(match.group(1).replace(",", ""))
-        move = float(match.group(3).replace(",", "")) * (1 if match.group(2) == "+" else -1)
-        percent = move / (per_gram - move) * 100 if per_gram != move else 0.0
-        return ExternalMarketQuote("Gold 24K INDIA", per_gram * 10, percent, "₹/10g", "India retail rate; Goodreturns")
+
+        per_gram = float(
+            match.group(1).replace(",", "")
+        )
+
+        change = float(
+            match.group(3).replace(",", "")
+        )
+
+        if match.group(2) == "-":
+            change = -change
+
+        previous = per_gram - change
+
+        percent = (
+            change / previous * 100
+            if previous
+            else 0.0
+        )
+
+        return ExternalMarketQuote(
+            "Gold 24K INDIA",
+            per_gram * 10,
+            percent,
+            "₹/10g",
+            "India retail rate; Goodreturns",
+        )
 
     @classmethod
     def _parse_indian_silver(cls, html: str) -> ExternalMarketQuote | None:
