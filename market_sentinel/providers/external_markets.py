@@ -71,34 +71,107 @@ class ExternalMarketsProvider:
     @classmethod
     def _fetch_indian_bullion(cls) -> list[ExternalMarketQuote]:
         """Fetch India retail bullion rates; never substitute a USD conversion."""
+        results: list[ExternalMarketQuote] = []
+
         try:
-            gold_html = requests.get(cls.INDIA_GOLD_URL, headers=cls.REQUEST_HEADERS, timeout=10).text
-            silver_html = requests.get(cls.INDIA_SILVER_URL, headers=cls.REQUEST_HEADERS, timeout=10).text
-            gold = cls._parse_indian_gold(gold_html)
-            silver = cls._parse_indian_silver(silver_html)
-            return [quote for quote in (gold, silver) if quote is not None]
+            gold_response = requests.get(
+                cls.INDIA_GOLD_URL,
+                headers=cls.REQUEST_HEADERS,
+                timeout=10,
+            )
+            gold_response.raise_for_status()
+
+            logger.info(
+                "Goodreturns gold response: status={}, length={}",
+                gold_response.status_code,
+                len(gold_response.text),
+            )
+
+            gold = cls._parse_indian_gold(gold_response.text)
+
+            if gold is not None:
+                logger.success(
+                    "Indian gold fetched: {} = {}",
+                    gold.name,
+                    gold.value,
+                )
+                results.append(gold)
+            else:
+                logger.warning(
+                    "Indian gold parser returned no result."
+                )
+
         except requests.RequestException as exc:
-            logger.warning("Indian bullion source unavailable: {}", exc)
-            return []
+            logger.warning(
+                "Indian gold source unavailable: {}",
+                exc,
+            )
+
+        try:
+            silver_response = requests.get(
+                cls.INDIA_SILVER_URL,
+                headers=cls.REQUEST_HEADERS,
+                timeout=10,
+            )
+            silver_response.raise_for_status()
+
+            silver = cls._parse_indian_silver(
+                silver_response.text
+            )
+
+            if silver is not None:
+                results.append(silver)
+
+        except requests.RequestException as exc:
+            logger.warning(
+                "Indian silver source unavailable: {}",
+                exc,
+            )
+
+        return results
 
     @staticmethod
     def _clean_text(html: str) -> str:
         return BeautifulSoup(html, "html.parser").get_text(" ", strip=True).replace("\xa0", " ")
 
     @classmethod
-    def _parse_indian_gold(cls, html: str) -> ExternalMarketQuote | None:
+    def _parse_indian_gold(
+            cls,
+            html: str,
+    ) -> ExternalMarketQuote | None:
+
         text = cls._clean_text(html)
 
         match = re.search(
-            r"24K[\s\xa0]*Gold[\s\xa0]*/[\s\xa0]*g"
-            r"[\s\xa0]*₹[\s\xa0]*([\d,]+)"
-            r"[\s\xa0]*([+-])[\s\xa0]*([\d,]+)",
+            r"24K\s*Gold\s*/\s*g"
+            r".{0,30}?"
+            r"₹\s*([\d,]+)"
+            r"\s*([+-])\s*([\d,]+)",
             text,
-            re.I,
+            re.I | re.S,
         )
 
         if not match:
-            logger.warning("Unable to parse India 24K gold rate from Goodreturns")
+            logger.warning(
+                "Unable to parse India 24K gold rate from Goodreturns."
+            )
+
+            # Useful diagnostic without dumping the entire page.
+            gold_position = text.lower().find("24k")
+
+            if gold_position >= 0:
+                logger.warning(
+                    "Gold page sample: {}",
+                    text[
+                    max(0, gold_position - 100):
+                    gold_position + 300
+                    ],
+                )
+            else:
+                logger.warning(
+                    "No '24K' text found in Goodreturns response."
+                )
+
             return None
 
         per_gram = float(
@@ -118,6 +191,13 @@ class ExternalMarketsProvider:
             change / previous * 100
             if previous
             else 0.0
+        )
+
+        logger.success(
+            "Parsed India 24K Gold: ₹{:,.0f}/g, change={:+.0f}, percent={:+.2f}%",
+            per_gram,
+            change,
+            percent,
         )
 
         return ExternalMarketQuote(
