@@ -29,8 +29,13 @@ on:
           - full
 
   schedule:
-    # 08:00 AM IST (UTC+5:30)
-    - cron: "30 2 * * 1-5"
+    # 10:00 AM IST (UTC+5:30). This allows the opening auction and initial
+    # cash/F&O liquidity to settle before a pre-market-style decision brief.
+    - cron: "30 4 * * 1-5"
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   morning_premarket:
@@ -48,10 +53,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Restore latest EOD OI snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/restore_options_snapshot.py
+
       - name: Run Market Sentinel
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.6' }}
           ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
           ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
           ANGEL_PIN: ${{ secrets.ANGEL_PIN }}

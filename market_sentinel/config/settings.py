@@ -67,7 +67,7 @@ class Settings:
     # OpenAI market-summary generation
     # ------------------------------------------------------------------
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-5.6")
 
     # ------------------------------------------------------------------
     # Angel One

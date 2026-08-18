@@ -25,7 +25,12 @@ class NseMoversProvider:
             response.raise_for_status()
             payload = response.json()
             rows = payload.get("data", []) if isinstance(payload, dict) else []
-            snapshots = [item for row in rows if (item := self._snapshot(row)) is not None]
+            # NSE may include metadata strings alongside quote mappings.  One
+            # malformed entry must not make the whole movers panel fall back.
+            snapshots = [
+                item for row in rows
+                if isinstance(row, dict) and (item := self._snapshot(row)) is not None
+            ]
             snapshots.sort(key=lambda item: item.percent_change, reverse=direction == "gainers")
             filtered = [item for item in snapshots if item.percent_change > 0] if direction == "gainers" else [item for item in snapshots if item.percent_change < 0]
             return filtered[:limit]

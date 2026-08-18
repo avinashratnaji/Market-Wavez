@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
+from urllib.parse import quote
 
 import requests
 from bs4 import BeautifulSoup
@@ -38,35 +40,71 @@ class ExternalMarketsProvider:
 
     def fetch(self) -> tuple[list[ExternalMarketQuote], list[ExternalMarketQuote], list[ExternalMarketQuote], list[ExternalMarketQuote]]:
         try:
-            import yfinance as yf
-
             symbols = list(self.GLOBAL.values()) + list(self.ADRS.values()) + list(self.CRYPTO.values()) + list(self.COMMODITIES.values()) + [self.FX, self.GOLD, self.SILVER]
-            data = yf.download(symbols, period="5d", interval="1d", group_by="ticker", auto_adjust=False, progress=False, threads=True)
-            quote = lambda name, symbol, unit="", note="": self._quote(data, name, symbol, unit, note)
+            data = self._yahoo_charts(symbols)
+            quote = lambda name, symbol, unit="", note="": self._chart_quote(data, name, symbol, unit, note)
             global_indices = self._present(quote(name, symbol) for name, symbol in self.GLOBAL.items())
             adrs = self._present(quote(name, symbol) for name, symbol in self.ADRS.items())
             crypto = self._present(quote(name, symbol, "$") for name, symbol in self.CRYPTO.items())
             commodities = self._present(quote(name, symbol, "$", "Higher crude can pressure India") for name, symbol in self.COMMODITIES.items())
-            inr = self._last(data, self.FX)
-            gold = self._last(data, self.GOLD)
-            silver = self._last(data, self.SILVER)
+            inr = data.get(self.FX, (None, None))[0]
+            gold = data.get(self.GOLD, (None, None))[0]
+            silver = data.get(self.SILVER, (None, None))[0]
             # Jewellery-market rates must not be labelled as an Indian price
             # when they are only a COMEX USD quote converted to INR.
             commodities[0:0] = self._fetch_indian_bullion()
             if inr and gold:
                 commodities.append(ExternalMarketQuote(
                     "Gold (COMEX INR equiv.)", gold * inr / 31.1035 * 10,
-                    self._percent(data, self.GOLD), "₹/10g", "International futures converted to INR",
+                    data.get(self.GOLD, (None, None))[1] or 0.0, "₹/10g", "International futures converted to INR",
                 ))
             if inr and silver:
                 commodities.append(ExternalMarketQuote(
                     "Silver (COMEX INR equiv.)", silver * inr / 31.1035 * 1000,
-                    self._percent(data, self.SILVER), "₹/kg", "International futures converted to INR",
+                    data.get(self.SILVER, (None, None))[1] or 0.0, "₹/kg", "International futures converted to INR",
                 ))
             return global_indices, adrs, commodities, crypto
         except Exception as exc:
             logger.warning("Global market snapshot unavailable: {}", exc)
             return [], [], [], []
+
+    @classmethod
+    def _yahoo_charts(cls, symbols: list[str]) -> dict[str, tuple[float | None, float | None]]:
+        """Fetch stateless Yahoo daily bars without yfinance's local cache."""
+        results: dict[str, tuple[float | None, float | None]] = {}
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(cls._one_yahoo_chart, symbol): symbol for symbol in symbols}
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    results[symbol] = future.result()
+                except Exception as exc:
+                    logger.warning("Yahoo quote unavailable for {}: {}", symbol, exc)
+                    results[symbol] = (None, None)
+        return results
+
+    @staticmethod
+    def _one_yahoo_chart(symbol: str) -> tuple[float | None, float | None]:
+        response = requests.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol, safe='')}",
+            params={"range": "5d", "interval": "1d"},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=12,
+        )
+        response.raise_for_status()
+        result = (response.json().get("chart") or {}).get("result") or []
+        rows = ((result[0].get("indicators") or {}).get("quote") or []) if result else []
+        closes = [float(value) for value in (rows[0].get("close", []) if rows else []) if value is not None]
+        if len(closes) < 2 or closes[-2] == 0:
+            return None, None
+        return closes[-1], (closes[-1] / closes[-2] - 1) * 100
+
+    @staticmethod
+    def _chart_quote(data, name: str, symbol: str, unit: str = "", note: str = "") -> ExternalMarketQuote | None:
+        value, percent = data.get(symbol, (None, None))
+        if value is None or percent is None:
+            return None
+        return ExternalMarketQuote(name, value, percent, unit, note)
 
     @staticmethod
     def _clean_text(html: str) -> str:

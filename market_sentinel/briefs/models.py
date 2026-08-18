@@ -148,7 +148,14 @@ class MorningBrief:
 
     indian_news: list[NewsArticle] = field(default_factory=list)
 
+    # Additional unique events after the five detailed India stories.  These
+    # are rendered at the appropriate scheduled window, not duplicated.
+    indian_events: list[NewsArticle] = field(default_factory=list)
+
     global_impact_news: list[NewsArticle] = field(default_factory=list)
+
+    # Additional unique US/global market events after the five lead stories.
+    us_events: list[NewsArticle] = field(default_factory=list)
 
     crypto_news: list[NewsArticle] = field(default_factory=list)
 
@@ -159,6 +166,11 @@ class MorningBrief:
     commodities: list[ExternalMarketQuote] = field(default_factory=list)
 
     crypto: list[ExternalMarketQuote] = field(default_factory=list)
+
+    # Fresh 10 AM F&O analysis, optionally compared with the stored previous
+    # EOD chain snapshot.  These are factual research cards, not calls.
+    option_research: list = field(default_factory=list)
+    option_research_failures: list[str] = field(default_factory=list)
 
     us_gainers: list[ExternalMarketQuote] = field(default_factory=list)
 

@@ -46,6 +46,10 @@ markdown headings. Keep the entire response below 550 characters."""
                     "instructions": self.INSTRUCTIONS,
                     "input": json.dumps(self._evidence(brief), ensure_ascii=False),
                     "max_output_tokens": self.MAX_OUTPUT_TOKENS,
+                    # Market inputs should not become retained application
+                    # state merely to generate a short daily narration.
+                    "store": False,
+                    "text": {"verbosity": "low"},
                 },
                 timeout=self.TIMEOUT_SECONDS,
             )
@@ -74,8 +78,8 @@ markdown headings. Keep the entire response below 550 characters."""
                 {"name": item.name, "change_percent": item.percent_change}
                 for item in brief.sectors[:9]
             ],
-            "indian_events": [self._article(item) for item in brief.indian_news[:5]],
-            "global_impact_events": [self._article(item) for item in brief.global_impact_news[:3]],
+            "indian_events": [self._article(item) for item in (brief.indian_news + brief.indian_events)[:10]],
+            "global_impact_events": [self._article(item) for item in (brief.global_impact_news + brief.us_events)[:10]],
             "institutional_flows": self._flows(brief),
             "ipos": [
                 {
@@ -86,6 +90,19 @@ markdown headings. Keep the entire response below 550 characters."""
                     "source": item.source,
                 }
                 for item in brief.top_ipos[:5]
+            ],
+            "options_research": [
+                {
+                    "symbol": item.symbol,
+                    "bias": item.bias,
+                    "confidence": item.confidence_score,
+                    "pcr": item.pcr,
+                    "support": item.support,
+                    "resistance": item.resistance,
+                    "evidence": list(item.evidence[:4]),
+                    "events": [event.title for event in item.market_events[:2]],
+                }
+                for item in brief.option_research[:10]
             ],
         }
 
@@ -144,4 +161,10 @@ markdown headings. Keep the entire response below 550 characters."""
             )
         elif brief.global_impact_news:
             lines.append(f"• Global watch: {brief.global_impact_news[0].title[:180]}")
-        return "\n".join(lines[:3])
+        if brief.option_research:
+            strongest = max(brief.option_research, key=lambda item: item.confidence_score)
+            lines.append(
+                f"• F&O context: {strongest.display_name} is tagged {strongest.bias.lower()} "
+                f"({strongest.confidence_score}/100); confirm risk and invalidation before acting."
+            )
+        return "\n".join(lines[:4])
