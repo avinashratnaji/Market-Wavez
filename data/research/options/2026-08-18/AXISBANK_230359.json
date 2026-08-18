@@ -1,0 +1,279 @@
+{
+  "symbol": "AXISBANK",
+  "spot_price": 1243.0,
+  "expiry": "25AUG2026",
+  "captured_at": "2026-08-18T23:03:59.281586",
+  "source": "Angel One SmartAPI FULL quote",
+  "contracts": [
+    {
+      "strike": 1220.0,
+      "type": "CE",
+      "oi": 1350625,
+      "change_oi": 0,
+      "volume": 4400625,
+      "iv": null,
+      "last_price": 31.85
+    },
+    {
+      "strike": 1240.0,
+      "type": "PE",
+      "oi": 2414375,
+      "change_oi": 0,
+      "volume": 7501250,
+      "iv": null,
+      "last_price": 9.45
+    },
+    {
+      "strike": 1320.0,
+      "type": "PE",
+      "oi": 72500,
+      "change_oi": 0,
+      "volume": 6875,
+      "iv": null,
+      "last_price": 80.5
+    },
+    {
+      "strike": 1300.0,
+      "type": "CE",
+      "oi": 2805000,
+      "change_oi": 0,
+      "volume": 2783750,
+      "iv": null,
+      "last_price": 1.75
+    },
+    {
+      "strike": 1120.0,
+      "type": "PE",
+      "oi": 862500,
+      "change_oi": 0,
+      "volume": 75000,
+      "iv": null,
+      "last_price": 0.2
+    },
+    {
+      "strike": 1320.0,
+      "type": "CE",
+      "oi": 1031250,
+      "change_oi": 0,
+      "volume": 1535625,
+      "iv": null,
+      "last_price": 1.1
+    },
+    {
+      "strike": 1340.0,
+      "type": "PE",
+      "oi": 183750,
+      "change_oi": 0,
+      "volume": 2500,
+      "iv": null,
+      "last_price": 92.5
+    },
+    {
+      "strike": 1140.0,
+      "type": "CE",
+      "oi": 1875,
+      "change_oi": 0,
+      "volume": 0,
+      "iv": null,
+      "last_price": 79.8
+    },
+    {
+      "strike": 1280.0,
+      "type": "PE",
+      "oi": 370625,
+      "change_oi": 0,
+      "volume": 382500,
+      "iv": null,
+      "last_price": 35.6
+    },
+    {
+      "strike": 1380.0,
+      "type": "CE",
+      "oi": 281250,
+      "change_oi": 0,
+      "volume": 37500,
+      "iv": null,
+      "last_price": 0.4
+    },
+    {
+      "strike": 1160.0,
+      "type": "CE",
+      "oi": 80625,
+      "change_oi": 0,
+      "volume": 8750,
+      "iv": null,
+      "last_price": 85.0
+    },
+    {
+      "strike": 1220.0,
+      "type": "PE",
+      "oi": 2051250,
+      "change_oi": 0,
+      "volume": 6443125,
+      "iv": null,
+      "last_price": 4.0
+    },
+    {
+      "strike": 1380.0,
+      "type": "PE",
+      "oi": 15625,
+      "change_oi": 0,
+      "volume": 1250,
+      "iv": null,
+      "last_price": 143.1
+    },
+    {
+      "strike": 1100.0,
+      "type": "PE",
+      "oi": 358125,
+      "change_oi": 0,
+      "volume": 11875,
+      "iv": null,
+      "last_price": 0.25
+    },
+    {
+      "strike": 1120.0,
+      "type": "CE",
+      "oi": 101875,
+      "change_oi": 0,
+      "volume": 0,
+      "iv": null,
+      "last_price": 104.55
+    },
+    {
+      "strike": 1200.0,
+      "type": "PE",
+      "oi": 1660000,
+      "change_oi": 0,
+      "volume": 5946250,
+      "iv": null,
+      "last_price": 2.1
+    },
+    {
+      "strike": 1280.0,
+      "type": "CE",
+      "oi": 2128125,
+      "change_oi": 0,
+      "volume": 5483750,
+      "iv": null,
+      "last_price": 3.15
+    },
+    {
+      "strike": 1100.0,
+      "type": "CE",
+      "oi": 3125,
+      "change_oi": 0,
+      "volume": 0,
+      "iv": null,
+      "last_price": 134.75
+    },
+    {
+      "strike": 1140.0,
+      "type": "PE",
+      "oi": 403750,
+      "change_oi": 0,
+      "volume": 218750,
+      "iv": null,
+      "last_price": 0.3
+    },
+    {
+      "strike": 1160.0,
+      "type": "PE",
+      "oi": 663125,
+      "change_oi": 0,
+      "volume": 370000,
+      "iv": null,
+      "last_price": 0.65
+    },
+    {
+      "strike": 1300.0,
+      "type": "PE",
+      "oi": 773750,
+      "change_oi": 0,
+      "volume": 189375,
+      "iv": null,
+      "last_price": 54.75
+    },
+    {
+      "strike": 1340.0,
+      "type": "CE",
+      "oi": 1112500,
+      "change_oi": 0,
+      "volume": 556875,
+      "iv": null,
+      "last_price": 0.55
+    },
+    {
+      "strike": 1240.0,
+      "type": "CE",
+      "oi": 4761875,
+      "change_oi": 0,
+      "volume": 14058750,
+      "iv": null,
+      "last_price": 17.15
+    },
+    {
+      "strike": 1360.0,
+      "type": "CE",
+      "oi": 587500,
+      "change_oi": 0,
+      "volume": 136250,
+      "iv": null,
+      "last_price": 0.45
+    },
+    {
+      "strike": 1180.0,
+      "type": "CE",
+      "oi": 203750,
+      "change_oi": 0,
+      "volume": 42500,
+      "iv": null,
+      "last_price": 70.3
+    },
+    {
+      "strike": 1180.0,
+      "type": "PE",
+      "oi": 1116250,
+      "change_oi": 0,
+      "volume": 997500,
+      "iv": null,
+      "last_price": 1.1
+    },
+    {
+      "strike": 1200.0,
+      "type": "CE",
+      "oi": 555000,
+      "change_oi": 0,
+      "volume": 1504375,
+      "iv": null,
+      "last_price": 50.2
+    },
+    {
+      "strike": 1260.0,
+      "type": "CE",
+      "oi": 4171250,
+      "change_oi": 0,
+      "volume": 9594375,
+      "iv": null,
+      "last_price": 7.5
+    },
+    {
+      "strike": 1260.0,
+      "type": "PE",
+      "oi": 1405000,
+      "change_oi": 0,
+      "volume": 2201250,
+      "iv": null,
+      "last_price": 19.85
+    },
+    {
+      "strike": 1360.0,
+      "type": "PE",
+      "oi": 273750,
+      "change_oi": 0,
+      "volume": 13750,
+      "iv": null,
+      "last_price": 108.75
+    }
+  ]
+}

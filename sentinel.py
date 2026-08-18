@@ -125,6 +125,11 @@ def doctor():
 
 
 def main():
+    # Windows PowerShell may still expose a legacy cp1252 stream.  Market
+    # panels intentionally use ₹ and emoji, so make CLI preview output UTF-8.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         prog="sentinel",
         description="Market Sentinel CLI"
@@ -180,6 +185,22 @@ def main():
     )
 
     sub.add_parser("telegram-listen", help="Run the Telegram command listener")
+
+    options_parser = sub.add_parser(
+        "option-radar",
+        help="Run the private ten-stock EOD option-chain research radar",
+    )
+    options_parser.add_argument(
+        "--send",
+        action="store_true",
+        help="Publish the analysis cards to the configured Telegram chat",
+    )
+
+    equity_parser = sub.add_parser(
+        "equity-research",
+        help="Create a private business-quality scorecard from reported financials",
+    )
+    equity_parser.add_argument("symbol", help="NSE symbol, for example HEROMOTOCO")
 
     sub.add_parser(
         "analyze",
@@ -293,6 +314,34 @@ def main():
     elif args.command == "telegram-listen":
         from market_sentinel.telegram.commands import TelegramCommandServer
         TelegramCommandServer().run()
+
+    elif args.command == "option-radar":
+        from market_sentinel.research.options.service import DailyOptionsRadarService
+
+        service = DailyOptionsRadarService()
+        setups, failures = service.run()
+        messages = service.format_messages(setups, failures)
+        print("\n\n".join(messages))
+        if args.send:
+            from market_sentinel.telegram.notifier import TelegramNotifier
+            TelegramNotifier().send_brief(messages=messages)
+
+    elif args.command == "equity-research":
+        from market_sentinel.research.equity.provider import YahooFinancialProvider
+        from market_sentinel.research.equity.scorer import EquityQualityScorer
+
+        card = EquityQualityScorer().score(YahooFinancialProvider().fetch(args.symbol))
+        print(f"\n{card.company_name} — PRIVATE EQUITY RESEARCH\n")
+        print(f"Quality score: {card.quality_score}/90")
+        print(f"Growth: {card.growth_score}/25 | Profitability: {card.profitability_score}/25")
+        print(f"Balance sheet: {card.balance_sheet_score}/20 | Cash flow: {card.cash_flow_score}/20")
+        if card.strengths:
+            print("\nStrengths:\n" + "\n".join(f"• {item}" for item in card.strengths))
+        if card.risks:
+            print("\nRisks:\n" + "\n".join(f"• {item}" for item in card.risks))
+        if card.data_gaps:
+            print("\nData gaps:\n" + "\n".join(f"• {item}" for item in card.data_gaps))
+        print("\nThis is a reported-fundamentals scorecard, not an investment recommendation.")
 
     elif args.command == "scheduler":
         from market_sentinel.scheduler.scheduler_service import SchedulerService

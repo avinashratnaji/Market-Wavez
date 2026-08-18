@@ -541,10 +541,15 @@ class MorningFormatter:
         if window == "full":
             return MorningFormatter.format(brief)
         if window == "morning":
+            from market_sentinel.research.options.service import DailyOptionsRadarService
             messages = [
                 "\n".join(MorningFormatter._premarket_message(brief)),
                 "\n".join(MorningFormatter._compact_news_message(brief.indian_news or brief.top_news, "TOP 5 STORIES DRIVING THE SESSION")),
             ]
+            if brief.indian_events:
+                messages.append("\n".join(MorningFormatter._compact_news_message(brief.indian_events, "ADDITIONAL INDIA MARKET EVENTS")))
+            if brief.option_research or brief.option_research_failures:
+                messages.extend(DailyOptionsRadarService.format_messages(brief.option_research, brief.option_research_failures))
             messages.extend(message for message in MorningFormatter.format(brief) if "CURRENT OPEN IPOs" in message)
             return messages
         if window == "afternoon":
@@ -553,13 +558,16 @@ class MorningFormatter:
             panels.extend(message for message in full if "INSTITUTIONAL FLOWS" in message)
             return panels
         if window == "night":
-            return [
+            messages = [
                 "\n".join(MorningFormatter._night_header(brief)),
                 "\n".join(MorningFormatter._compact_news_message(brief.global_impact_news, "GLOBAL MARKET NEWS", include_summary=False)),
                 "\n".join(MorningFormatter._external_markets_message(brief)),
                 "\n".join(MorningFormatter._us_movers_message(brief)),
                 "\n".join(MorningFormatter._compact_news_message(brief.crypto_news, "CRYPTO MARKET NEWS", include_summary=False)),
             ]
+            if brief.us_events:
+                messages.insert(2, "\n".join(MorningFormatter._compact_news_message(brief.us_events, "ADDITIONAL US MARKET EVENTS", include_summary=False)))
+            return messages
         raise ValueError(f"Unknown briefing window: {window}")
 
     @staticmethod
@@ -612,6 +620,13 @@ class MorningFormatter:
             "",
             "<i>Levels are rule-based reference zones, not investment advice.</i>",
         ]
+        if brief.ai_summary:
+            lines.extend((
+                "",
+                "🤖 <b>AI-GROUNDED MARKET READ</b>",
+                MorningFormatter.LINE,
+                escape(brief.ai_summary),
+            ))
         return lines
 
     @staticmethod

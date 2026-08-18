@@ -1,0 +1,35 @@
+name: Market Wavez Daily Options Research Radar
+
+on:
+  schedule:
+    # 03:55 PM IST (UTC+5:30), after the cash-market close.
+    - cron: "25 10 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  options_radar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Collect EOD option-chain snapshot for the next morning
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
+          ANGEL_PIN: ${{ secrets.ANGEL_PIN }}
+          ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+        run: python sentinel.py option-radar
+      - name: Preserve EOD snapshot for the 10 AM brief
+        uses: actions/upload-artifact@v4
+        with:
+          name: option-eod-snapshot
+          path: data/research/options
+          if-no-files-found: error
+          retention-days: 7
