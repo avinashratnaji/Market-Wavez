@@ -88,6 +88,8 @@ def _invalidation(direction: str, level: float) -> str:
 def _oi_comparison(current: OptionChainSnapshot, previous: OptionChainSnapshot | None) -> str | None:
     if previous is None or previous.captured_at >= current.captured_at:
         return None
+    if previous.expiry != current.expiry:
+        return "Previous EOD expiry differs; OI percentage comparison suppressed"
     prior = {(quote.strike, quote.option_type): quote.open_interest for quote in previous.contracts}
     if not prior:
         return None
@@ -99,4 +101,4 @@ def _oi_comparison(current: OptionChainSnapshot, previous: OptionChainSnapshot |
         return None
     call_change = (current_calls / prior_calls - 1) * 100
     put_change = (current_puts / prior_puts - 1) * 100
-    return f"OI vs saved {previous.captured_at:%d %b %H:%M}: calls {call_change:+.1f}%, puts {put_change:+.1f}%"
+    return f"OI vs previous EOD ({previous.captured_at:%d %b}): calls {call_change:+.1f}%, puts {put_change:+.1f}%"

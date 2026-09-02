@@ -4,11 +4,23 @@ on:
   schedule:
     # 03:55 PM IST (UTC+5:30), after the cash-market close.
     - cron: "25 10 * * 1-5"
+    - cron: "40 10 * * 1-5"
   workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: market-wavez-options-eod-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   options_radar:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Kolkata
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,7 +29,13 @@ jobs:
       - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Skip delayed fallback duplicate
+        id: guard
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/schedule_guard.py
       - name: Collect EOD option-chain snapshot for the next morning
+        if: steps.guard.outputs.skip != 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -25,8 +43,10 @@ jobs:
           ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
           ANGEL_PIN: ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+          MARKET_SENTINEL_SNAPSHOT_KIND: eod
         run: python sentinel.py option-radar
       - name: Preserve EOD snapshot for the 10 AM brief
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: option-eod-snapshot

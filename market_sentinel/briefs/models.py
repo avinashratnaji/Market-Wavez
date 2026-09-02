@@ -15,6 +15,7 @@ from market_sentinel.news.models import NewsArticle
 from market_sentinel.providers.angelone.models import (
     IndexSnapshot,
 )
+from market_sentinel.providers.macro_calendar import MacroEvent
 
 
 # ==========================================================
@@ -175,6 +176,12 @@ class MorningBrief:
     us_gainers: list[ExternalMarketQuote] = field(default_factory=list)
 
     us_losers: list[ExternalMarketQuote] = field(default_factory=list)
+
+    india_leaders: list[ExternalMarketQuote] = field(default_factory=list)
+
+    us_mega_caps: list[ExternalMarketQuote] = field(default_factory=list)
+
+    macro_events: list[MacroEvent] = field(default_factory=list)
 
     investor_flows: InvestorFlowSnapshot | None = None
 

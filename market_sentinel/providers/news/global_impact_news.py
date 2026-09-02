@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Iterable
+from collections import Counter
 
 from market_sentinel.news.models import NewsArticle
 from market_sentinel.providers.news.news_intelligence import NewsPortfolioSelector
@@ -55,7 +56,21 @@ class GlobalImpactNews:
                 article.score = score
                 candidates.append(article)
         candidates.sort(key=self._sort_key, reverse=True)
-        return NewsPortfolioSelector().select(candidates, limit=limit)
+        portfolio = NewsPortfolioSelector().select(candidates, limit=max(limit * 3, limit))
+        output: list[NewsArticle] = []
+        source_counts: Counter[str] = Counter()
+        for article in portfolio:
+            source = (article.source or "Unknown").strip().lower()
+            if source_counts[source] >= 2:
+                continue
+            output.append(article)
+            source_counts[source] += 1
+            if len(output) == limit:
+                return output
+        # Never fill empty slots with repeated articles from one publisher.
+        # A shorter multi-source panel is more trustworthy than a nominally
+        # full list that reads like one site's news feed.
+        return output[:limit]
 
     def _score(self, article: NewsArticle) -> int:
         if article.source.strip() not in self.TRUSTED_SOURCES:

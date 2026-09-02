@@ -128,6 +128,8 @@ class StockSnapshot(MarketSnapshot):
 
     delivery_percentage: float | None = None
 
+    company_name: str = ""
+
 
 # ==========================================================
 # Commodity

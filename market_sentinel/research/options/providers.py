@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ class NseOptionChainProvider:
         records = payload.get("records") or {}
         rows = records.get("data") or []
         expiry_dates = records.get("expiryDates") or []
+        selected_expiry = str(expiry_dates[0]) if expiry_dates else ""
         spot = float(records.get("underlyingValue") or 0)
         # NSE sometimes omits underlyingValue outside an active session while
         # still returning the complete OI table.  OI remains valid evidence;
@@ -43,10 +45,16 @@ class NseOptionChainProvider:
             raise ValueError(f"NSE option chain is incomplete for {symbol}")
         contracts: list[OptionContractQuote] = []
         for row in rows:
+            row_expiry = str(row.get("expiryDate") or "")
+            if selected_expiry and row_expiry and row_expiry != selected_expiry:
+                continue
             strike = float(row.get("strikePrice") or 0)
             for option_type in ("CE", "PE"):
                 leg = row.get(option_type)
                 if not isinstance(leg, dict) or not strike:
+                    continue
+                leg_expiry = str(leg.get("expiryDate") or row_expiry)
+                if selected_expiry and leg_expiry and leg_expiry != selected_expiry:
                     continue
                 contracts.append(OptionContractQuote(
                     strike=strike, option_type=option_type,
@@ -60,7 +68,7 @@ class NseOptionChainProvider:
             raise ValueError(f"NSE option chain has no contracts for {symbol}")
         return OptionChainSnapshot(
             symbol=symbol, spot_price=spot,
-            expiry=str(expiry_dates[0]) if expiry_dates else "Nearest available",
+            expiry=selected_expiry or "Nearest available",
             captured_at=_parse_timestamp(records.get("timestamp")),
             contracts=tuple(contracts), source="NSE option-chain",
         )
@@ -115,13 +123,14 @@ class SnapshotStore:
     def __init__(self, directory: Path | None = None) -> None:
         self.directory = directory or Path("data") / "research" / "options"
 
-    def save(self, snapshot: OptionChainSnapshot) -> Path:
+    def save(self, snapshot: OptionChainSnapshot, kind: str = "live") -> Path:
         target = self.directory / snapshot.captured_at.strftime("%Y-%m-%d")
         target.mkdir(parents=True, exist_ok=True)
         path = target / f"{snapshot.symbol}_{snapshot.captured_at.strftime('%H%M%S')}.json"
         payload = {
             "symbol": snapshot.symbol, "spot_price": snapshot.spot_price, "expiry": snapshot.expiry,
             "captured_at": snapshot.captured_at.isoformat(), "source": snapshot.source,
+            "kind": kind,
             "contracts": [
                 {"strike": quote.strike, "type": quote.option_type, "oi": quote.open_interest,
                  "change_oi": quote.change_in_open_interest, "volume": quote.volume,
@@ -155,6 +164,38 @@ class SnapshotStore:
                         expiry=str(payload.get("expiry") or "Unknown"),
                         captured_at=datetime.fromisoformat(payload["captured_at"]), contracts=contracts,
                         source=str(payload.get("source") or "stored option snapshot"),
+                    )
+            except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+                continue
+        return None
+
+    def previous_session_eod(self, symbol: str) -> OptionChainSnapshot | None:
+        """Load only a labelled prior EOD snapshot, never an intraday file."""
+        if not self.directory.exists():
+            return None
+        candidates = sorted(self.directory.glob(f"**/{symbol}_*.json"), reverse=True)
+        for path in candidates:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if str(payload.get("kind") or "").lower() != "eod":
+                    continue
+                contracts = tuple(
+                    OptionContractQuote(
+                        strike=float(row["strike"]), option_type=str(row["type"]),
+                        open_interest=int(row.get("oi") or 0),
+                        change_in_open_interest=int(row.get("change_oi") or 0),
+                        volume=int(row.get("volume") or 0),
+                        implied_volatility=_float_or_none(row.get("iv")),
+                        last_price=_float_or_none(row.get("last_price")),
+                    )
+                    for row in payload.get("contracts", [])
+                )
+                if contracts:
+                    return OptionChainSnapshot(
+                        symbol=str(payload["symbol"]), spot_price=float(payload.get("spot_price") or 0),
+                        expiry=str(payload.get("expiry") or "Unknown"),
+                        captured_at=datetime.fromisoformat(payload["captured_at"]), contracts=contracts,
+                        source=str(payload.get("source") or "stored EOD option snapshot"),
                     )
             except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
                 continue
@@ -273,3 +314,66 @@ def _int_or_zero(value: Any) -> int:
         return int(float(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+class NseActiveFnoProvider:
+    """Discover the most actively traded stock derivatives from NSE."""
+
+    HOME_URL = "https://www.nseindia.com"
+    ACTIVE_URLS = (
+        "https://www.nseindia.com/api/liveEquity-derivatives",
+        "https://www.nseindia.com/api/snapshot-derivatives-equity",
+    )
+    INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTYNXT50"}
+
+    def fetch_top(self, limit: int = 5) -> list[WatchlistItem]:
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": f"{self.HOME_URL}/market-data/most-active-contracts",
+        })
+        session.get(self.HOME_URL, timeout=12)
+        for url in self.ACTIVE_URLS:
+            for index in ("top20_contracts", "allcontracts", "volume"):
+                response = session.get(url, params={"index": index}, timeout=12)
+                if not response.ok:
+                    continue
+                selected = self._parse(response.json(), limit)
+                if selected:
+                    return selected
+        raise ValueError("NSE most-active stock-derivative list unavailable")
+
+    @classmethod
+    def _parse(cls, payload: Any, limit: int) -> list[WatchlistItem]:
+        rows = cls._rows(payload)
+        volumes: dict[str, int] = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            instrument = str(row.get("instrumentType") or row.get("instrument") or row.get("series") or "").upper()
+            identifier = str(row.get("identifier") or row.get("symbol") or "").upper()
+            if instrument and "STK" not in instrument and not identifier.startswith(("OPTSTK", "FUTSTK")):
+                continue
+            symbol = str(row.get("underlying") or row.get("underlyingSymbol") or "").upper().strip()
+            if not symbol:
+                match = re.match(r"(?:OPTSTK|FUTSTK)([A-Z&]+)", identifier)
+                symbol = match.group(1) if match else ""
+            if not symbol or symbol in cls.INDEX_SYMBOLS:
+                continue
+            volume = _int_or_zero(row.get("totalTradedVolume") or row.get("volume") or row.get("tradeVolume"))
+            volumes[symbol] = volumes.get(symbol, 0) + volume
+        selected = sorted(volumes, key=volumes.get, reverse=True)[:limit]
+        return [WatchlistItem(symbol, symbol.replace("&", " & ").title(), f"{symbol}.NS", symbol) for symbol in selected]
+
+    @classmethod
+    def _rows(cls, payload: Any) -> list[Any]:
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            for key in ("data", "records", "filtered", "result"):
+                nested = payload.get(key)
+                rows = cls._rows(nested)
+                if rows:
+                    return rows
+        return []

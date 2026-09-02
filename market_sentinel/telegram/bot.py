@@ -97,6 +97,16 @@ class TelegramBot:
 
             raise
 
+    async def send_photo(self, photo_path: str) -> None:
+        """Send a generated briefing card before detailed text panels."""
+        try:
+            with open(photo_path, "rb") as photo:
+                await self.bot.send_photo(chat_id=self.chat_id, photo=photo)
+            logger.success("Telegram briefing card sent successfully.")
+        except (OSError, TelegramError) as ex:
+            logger.exception(f"Telegram photo error: {ex}")
+            raise
+
     @staticmethod
     def _message_chunks(message: str, limit: int = 3900) -> list[str]:
         """Split long brief sections on line boundaries below Telegram's cap."""

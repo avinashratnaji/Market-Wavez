@@ -56,10 +56,15 @@ class NseMoversProvider:
         if not row.get("symbol") or price is None or percent is None:
             return None
         previous = price / (1 + percent / 100) if percent != -100 else price
+        meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+        company_name = str(
+            row.get("companyName") or row.get("company") or meta.get("companyName") or ""
+        ).strip()
         return StockSnapshot(
             name=str(row["symbol"]), exchange="NSE", token=str(row.get("identifier", "")),
             value=price, change=price - previous, percent_change=percent,
             open=cls._number(row, "open") or 0, high=cls._number(row, "dayHigh", "high") or 0,
             low=cls._number(row, "dayLow", "low") or 0, close=previous,
             volume=cls._number(row, "totalTradedVolume", "volume") or 0, updated_at=datetime.now(),
+            company_name=company_name,
         )

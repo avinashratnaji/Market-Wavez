@@ -24,6 +24,8 @@ from market_sentinel.telegram.notifier import (
 )
 
 from market_sentinel.utils.logger import logger
+from market_sentinel.visuals.brief_card import BriefCardRenderer
+from html import escape
 
 
 class MorningBriefService:
@@ -43,13 +45,24 @@ class MorningBriefService:
             "Building Morning Brief..."
         )
 
-        brief = self.builder.build()
+        brief = self.builder.build(window=window)
 
         logger.success(
             "Morning Brief built."
         )
 
-        messages = self._section_messages(MorningFormatter.format_window(brief, window), section)
+        fallback_messages = self._section_messages(MorningFormatter.format_window(brief, window), section)
+        messages = fallback_messages
+        image_paths: list[str] = []
+        if window in {"morning", "afternoon", "night"}:
+            try:
+                image_paths = [str(path) for path in BriefCardRenderer().render_cards(brief, window, section)]
+                # Image cards contain the displayed data. Keep only compact,
+                # clickable source links; do not post the same tables twice.
+                if image_paths:
+                    messages = self._source_messages(brief, window, section)
+            except Exception as exc:
+                logger.warning(f"Briefing card unavailable; continuing with text: {exc}")
 
         logger.info(
             "Sending Morning Brief..."
@@ -89,6 +102,7 @@ class MorningBriefService:
         self.notifier.send_brief(
             messages=messages,
             sticker_id=sticker_id,
+            image_paths=image_paths,
         )
 
         logger.success(
@@ -115,3 +129,33 @@ class MorningBriefService:
             raise ValueError(f"Unknown brief section: {section}")
         selected = [message for message in messages if any(marker in message for marker in requested)]
         return selected or messages[:1]
+
+    @staticmethod
+    def _source_messages(brief, window: str, section: str = "full") -> list[str]:
+        """Preserve source verification without duplicating image headlines."""
+        section = (section or "full").lower()
+        if window == "morning" and section == "full":
+            groups = (("INDIA NEWS SOURCES", brief.indian_news or brief.top_news),)
+        elif window == "night" and section == "full":
+            groups = (
+                ("GLOBAL NEWS SOURCES", brief.global_impact_news),
+                ("CRYPTO NEWS SOURCES", brief.crypto_news),
+            )
+        elif window == "night" and section == "global_markets":
+            groups = (("GLOBAL NEWS SOURCES", brief.global_impact_news),)
+        elif window == "night" and section == "crypto":
+            groups = (("CRYPTO NEWS SOURCES", brief.crypto_news),)
+        else:
+            groups = ()
+        lines: list[str] = []
+        for title, articles in groups:
+            links = []
+            for number, article in enumerate(articles[:5], 1):
+                source = escape((article.source or "Source").strip())
+                if article.url:
+                    source = f'<a href="{escape(article.url, quote=True)}">{source}</a>'
+                links.append(f"{number}. {source}")
+            if links:
+                lines.extend((f"🔗 <b>{title}</b>", " · ".join(links), ""))
+        lines.append("<i>Market data is informational research, not investment advice.</i>")
+        return ["\n".join(lines)]
