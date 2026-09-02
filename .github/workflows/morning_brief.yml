@@ -12,6 +12,7 @@ on:
           - full
           - indian_markets
           - movers
+          - stock_research
           - global_markets
           - us_movers
           - crypto

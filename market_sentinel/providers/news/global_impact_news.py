@@ -61,7 +61,10 @@ class GlobalImpactNews:
         source_counts: Counter[str] = Counter()
         for article in portfolio:
             source = (article.source or "Unknown").strip().lower()
-            if source_counts[source] >= 2:
+            # Three stories from a primary newsroom are acceptable when they
+            # are separate event clusters; the event selector above has
+            # already removed duplicate coverage of the same development.
+            if source_counts[source] >= 3:
                 continue
             output.append(article)
             source_counts[source] += 1

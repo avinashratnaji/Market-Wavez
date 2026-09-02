@@ -42,6 +42,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Iterable
+from urllib.parse import quote_plus
 
 from market_sentinel.news.models import NewsArticle
 from market_sentinel.providers.rss_collector import RSSCollector
@@ -581,7 +582,7 @@ class IndianMarketNews:
     # PUBLIC API
     # ==========================================================
 
-    def collect(self) -> list[NewsArticle]:
+    def collect(self, extra_symbols: Iterable[str] = ()) -> list[NewsArticle]:
         """
         Collect and filter Indian-market relevant articles.
 
@@ -592,6 +593,21 @@ class IndianMarketNews:
         """
 
         raw_articles = self.collector.collect()
+
+        # The fixed finance feeds can miss a fast-moving mid-cap catalyst.
+        # Add one bounded Google News query for the actual live NSE movers so
+        # names such as Ather are discoverable without maintaining a static
+        # hand-written watchlist.
+        symbols = [str(symbol).replace("-EQ", "").strip() for symbol in extra_symbols if symbol]
+        symbols = list(dict.fromkeys(symbols))[:20]
+        if symbols:
+            query = "(" + " OR ".join(symbols) + ") (shares OR stock OR results OR order OR acquisition OR volume OR rally) when:2d"
+            url = (
+                "https://news.google.com/rss/search?q=" + quote_plus(query)
+                + "&hl=en-IN&gl=IN&ceid=IN:en"
+            )
+            raw_articles.extend(RSSCollector((url,)).collect())
+            raw_articles = RSSCollector._deduplicate(raw_articles)
 
         relevant_articles: list[NewsArticle] = []
 

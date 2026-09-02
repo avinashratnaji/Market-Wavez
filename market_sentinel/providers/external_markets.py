@@ -26,7 +26,12 @@ class ExternalMarketsProvider:
         "KOSPI": "^KS11", "NIKKEI": "^N225", "DAX": "^GDAXI", "FTSE 100": "^FTSE",
     }
     ADRS = {"INFY ADR": "INFY", "HDFC Bank ADR": "HDB", "ICICI Bank ADR": "IBN"}
-    CRYPTO = {"BTC": "BTC-USD", "ETH": "ETH-USD", "SOL": "SOL-USD", "XRP": "XRP-USD"}
+    CRYPTO = {
+        "Bitcoin": "BTC-USD", "Ethereum": "ETH-USD",
+        "Solana": "SOL-USD", "XRP": "XRP-USD",
+        "BNB": "BNB-USD", "Dogecoin": "DOGE-USD",
+        "Cardano": "ADA-USD", "Chainlink": "LINK-USD",
+    }
     COMMODITIES = {"Brent": "BZ=F"}
     FX = "INR=X"
     GOLD = "GC=F"

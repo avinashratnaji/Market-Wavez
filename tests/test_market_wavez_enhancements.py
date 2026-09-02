@@ -10,6 +10,11 @@ from market_sentinel.briefs.models import MorningBrief
 from market_sentinel.briefs.morning import MorningBriefBuilder
 from market_sentinel.news.models import NewsArticle
 from market_sentinel.providers.macro_calendar import UsMacroCalendarProvider
+from market_sentinel.providers.angelone.models import StockSnapshot
+from market_sentinel.providers.news.summary_enricher import NewsSummaryEnricher
+from market_sentinel.providers.nse_movers import NseMoversProvider
+from market_sentinel.providers.stock_discovery import StockDiscoveryProvider, _History
+from market_sentinel.research.equity.premium import PremiumEquityAssessment
 from market_sentinel.services.morning_brief_service import MorningBriefService
 from market_sentinel.visuals.brief_card import BriefCardRenderer
 from market_sentinel.research.options.models import OptionChainSnapshot, OptionContractQuote
@@ -162,7 +167,7 @@ def test_visual_card_plan_uses_section_titles_and_distinct_themes():
 
     assert [(item.title, item.theme) for item in specs] == [
         ("AI-GROUNDED MARKET READ", "summary"),
-        ("INDIA MARKET CATALYSTS", "india_news"),
+        ("INDIA CATALYSTS · 1/2", "india_news"),
     ]
     assert all(item.title != "MARKET WAVEZ" for item in specs)
 
@@ -183,4 +188,101 @@ def test_visual_news_followups_are_scoped_to_requested_section():
 
     assert "Federal Reserve" in global_message and "CoinDesk" not in global_message
     assert "CoinDesk" in crypto_message and "Federal Reserve" not in crypto_message
-    assert "NEWS SOURCES" not in movers_message
+    assert "MARKET NEWS" not in movers_message
+
+
+def test_nse_mover_parser_supports_current_all_securities_fields():
+    result = NseMoversProvider._snapshot({
+        "symbol": "ATHERENERG",
+        "ltp": "742.50",
+        "net_price": "6.25",
+        "open_price": "705.00",
+        "high_price": "750.00",
+        "low_price": "698.00",
+        "prev_price": "698.83",
+        "trade_quantity": "1876543",
+    })
+
+    assert result is not None
+    assert result.name == "ATHERENERG"
+    assert result.value == 742.5
+    assert result.percent_change == 6.25
+    assert result.volume == 1_876_543
+
+
+def _stock(symbol: str, change: float, *, price: float = 150, company: str = "Example Limited") -> StockSnapshot:
+    return StockSnapshot(
+        name=symbol, exchange="NSE", token="", value=price, change=price * change / 100,
+        percent_change=change, open=140, high=152, low=138, close=141,
+        volume=2_000_000, updated_at=datetime(2026, 9, 2, 10), company_name=company,
+    )
+
+
+def test_stock_discovery_surfaces_momentum_and_reported_growth(monkeypatch):
+    provider = StockDiscoveryProvider()
+    ather = _stock("ATHERENERG", 6.2, company="Ather Energy Limited")
+    weak = _stock("WEAKCO", -4.1, price=95, company="Weak Company")
+    histories = {
+        "ATHERENERG": _History(8.0, 19.0, 130.0, 120.0, 500_000),
+        "WEAKCO": _History(-6.0, -12.0, 110.0, 120.0, 500_000),
+    }
+    monkeypatch.setattr(provider, "_histories", lambda stocks: histories)
+    def assessments(stocks, histories, articles, fii_dii_context):
+        return {
+            "ATHERENERG": PremiumEquityAssessment(
+                "ATHERENERG", "Ather Energy Limited", 78, 22, 18, 7, 14, 5, 12, 80,
+                ("Sales 3Y growth 32.0%", "ROCE 18.0%"), (), (),
+                ("Sales 3Y +32.0%", "Profit 3Y +28.0%"), "https://example.test/ather",
+            ),
+            "WEAKCO": PremiumEquityAssessment(
+                "WEAKCO", "Weak Company", 42, 5, 5, 2, 3, 0, 42, 75,
+                (), ("Elevated debt/equity (1.80x)",), (),
+                ("Sales 3Y -8.0%",), "https://example.test/weak",
+            ),
+        }
+    monkeypatch.setattr(provider.premium, "assess_many", assessments)
+
+    today_up, today_down, week_up, week_down, growth = provider.analyze([ather], [weak])
+
+    assert today_up[0].symbol == "ATHERENERG"
+    assert today_down[0].symbol == "WEAKCO"
+    assert week_up[0].symbol == "ATHERENERG"
+    assert week_down[0].symbol == "WEAKCO"
+    assert growth[0].growth_score == 22
+    assert growth[0].quality_score == 18
+
+
+def test_news_summary_enricher_removes_publisher_suffix_and_requires_context(monkeypatch):
+    articles = [
+        NewsArticle(
+            "Ather rises after quarterly update - Example News",
+            "Ather reported stronger deliveries while management retained its investment plan, giving investors new operating evidence rather than a price-only headline.",
+            "Example News",
+            "https://example.test/ather",
+        ),
+        NewsArticle("Market rises", "Market rises", "Wire", "https://example.test/weak"),
+    ]
+    monkeypatch.setattr(NewsSummaryEnricher, "_page_description", classmethod(lambda cls, url: ""))
+
+    result = NewsSummaryEnricher().enrich(articles, "Indian equities")
+
+    assert [item.title for item in result] == ["Ather rises after quarterly update"]
+    assert "stronger deliveries" in result[0].summary
+
+
+def test_source_followup_contains_summary_and_clickable_link():
+    brief = MorningBrief(
+        generated_at=datetime(2026, 9, 2, 10), health_score=60,
+        market_sentiment="Neutral", confidence=60,
+        indian_news=[NewsArticle(
+            "Ather Energy reports stronger deliveries",
+            "Quarterly deliveries rose and the company retained its operating plan, supplying a company-specific catalyst for the move.",
+            "NSE filing", "https://example.test/filing",
+        )],
+    )
+
+    message = MorningBriefService._source_messages(brief, "morning", "full")[0]
+
+    assert "stronger deliveries" in message
+    assert '<a href="https://example.test/filing">NSE filing</a>' in message
+    assert "INDIA NEWS SOURCES" not in message

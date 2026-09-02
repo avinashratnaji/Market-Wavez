@@ -552,6 +552,16 @@ class MorningFormatter:
                 messages.append("\n".join(MorningFormatter._macro_calendar_message(brief)))
             if brief.india_leaders:
                 messages.append("\n".join(MorningFormatter._leaders_message(brief.india_leaders, "INDIA LARGE-CAP WATCH", "🇮🇳")))
+            if brief.today_bullish or brief.today_bearish:
+                messages.append("\n".join(MorningFormatter._stock_research_message(
+                    "STOCKS TO RESEARCH · TODAY", brief.today_bullish, brief.today_bearish,
+                )))
+            if brief.week_bullish or brief.week_bearish:
+                messages.append("\n".join(MorningFormatter._stock_research_message(
+                    "STOCKS TO RESEARCH · THIS WEEK", brief.week_bullish, brief.week_bearish,
+                )))
+            if brief.growth_candidates:
+                messages.append("\n".join(MorningFormatter._growth_research_message(brief.growth_candidates)))
             if brief.option_research or brief.option_research_failures:
                 messages.extend(DailyOptionsRadarService.format_messages(brief.option_research, brief.option_research_failures))
             messages.extend(message for message in MorningFormatter.format(brief) if "CURRENT OPEN IPOs" in message)
@@ -564,17 +574,19 @@ class MorningFormatter:
         if window == "night":
             messages = [
                 "\n".join(MorningFormatter._night_header(brief)),
-                "\n".join(MorningFormatter._compact_news_message(brief.global_impact_news, "GLOBAL MARKET NEWS", include_summary=False)),
+                "\n".join(MorningFormatter._compact_news_message(brief.global_impact_news, "GLOBAL MARKET NEWS · 1/2")),
                 "\n".join(MorningFormatter._external_markets_message(brief)),
                 "\n".join(MorningFormatter._us_movers_message(brief)),
-                "\n".join(MorningFormatter._compact_news_message(brief.crypto_news, "CRYPTO MARKET NEWS", include_summary=False)),
+                "\n".join(MorningFormatter._compact_news_message(brief.crypto_news[:5], "CRYPTO MARKET NEWS · 1/2")),
             ]
             if brief.us_events:
-                messages.insert(2, "\n".join(MorningFormatter._compact_news_message(brief.us_events, "ADDITIONAL US MARKET EVENTS", include_summary=False)))
+                messages.insert(2, "\n".join(MorningFormatter._compact_news_message(brief.us_events, "GLOBAL MARKET NEWS · 2/2")))
             if brief.macro_events:
                 messages.insert(3, "\n".join(MorningFormatter._macro_calendar_message(brief)))
             if brief.us_mega_caps:
                 messages.insert(-1, "\n".join(MorningFormatter._leaders_message(brief.us_mega_caps, "MAGNIFICENT SEVEN", "🇺🇸")))
+            if len(brief.crypto_news) > 5:
+                messages.append("\n".join(MorningFormatter._compact_news_message(brief.crypto_news[5:10], "CRYPTO MARKET NEWS · 2/2")))
             return messages
         raise ValueError(f"Unknown briefing window: {window}")
 
@@ -675,6 +687,53 @@ class MorningFormatter:
         return lines if len(lines) > 3 else lines + ["No major market-moving stories were verified."]
 
     @staticmethod
+    def _stock_research_message(title: str, bullish, bearish) -> list[str]:
+        lines = ["━━━━━━━━━━━━━━━━━━━━", f"🔎 <b>{title}</b>", "━━━━━━━━━━━━━━━━━━━━"]
+        for heading, icon, signals in (("BULLISH EVIDENCE", "🟢", bullish), ("BEARISH EVIDENCE", "🔴", bearish)):
+            if not signals:
+                continue
+            lines.extend(("", f"{icon} <b>{heading}</b>"))
+            for signal in signals[:3]:
+                reasons = "; ".join(signal.reasons[:2])
+                lines.append(
+                    f"• <b>{escape(signal.company_name)}</b> (<code>{escape(signal.symbol)}</code>) "
+                    f"— research <code>{signal.score}/100</code>, evidence <code>{signal.research_confidence}%</code>, move <code>{signal.percent_change:+.2f}%</code>"
+                )
+                lines.append(
+                    f"  Growth <code>{signal.growth_score}/26</code> · Quality <code>{signal.quality_score}/24</code> · "
+                    f"Ownership <code>{signal.ownership_score}/10</code> · Technical <code>{signal.technical_score}/15</code>"
+                )
+                if reasons:
+                    lines.append(f"  {escape(reasons)}")
+                if signal.metrics:
+                    lines.append(f"  Metrics: {escape(' · '.join(signal.metrics[:4]))}")
+                if signal.key_risks:
+                    lines.append(f"  Risk: {escape(signal.key_risks[0])}")
+                if signal.report_url:
+                    lines.append(f'  <a href="{escape(signal.report_url, quote=True)}">Reported financials & ownership</a>')
+        lines.extend(("", "<i>Screening candidates for further research—not buy/sell calls. Confirm liquidity, filings and risk.</i>"))
+        return lines
+
+    @staticmethod
+    def _growth_research_message(signals) -> list[str]:
+        lines = ["━━━━━━━━━━━━━━━━━━━━", "🌱 <b>HIGH-GROWTH RESEARCH CANDIDATES</b>", "━━━━━━━━━━━━━━━━━━━━"]
+        for signal in signals[:5]:
+            growth_metrics = [item for item in signal.metrics if item.startswith(("Sales", "Profit"))]
+            growth_text = " · ".join(growth_metrics[:3]) or "Reported multi-year growth evidence"
+            lines.extend((
+                f"• <b>{escape(signal.company_name)}</b> (<code>{escape(signal.symbol)}</code>) — research <code>{signal.score}/100</code>, evidence <code>{signal.research_confidence}%</code>",
+                f"  {escape(growth_text)}; quality {signal.quality_score}/24",
+            ))
+            if signal.metrics:
+                lines.append(f"  Metrics: {escape(' · '.join(signal.metrics[:4]))}")
+            if signal.key_risks:
+                lines.append(f"  Risk: {escape(signal.key_risks[0])}")
+            if signal.report_url:
+                lines.append(f'  <a href="{escape(signal.report_url, quote=True)}">Reported financials & ownership</a>')
+        lines.extend(("", "<i>Fundamental-growth screen, not a valuation verdict or investment recommendation.</i>"))
+        return lines
+
+    @staticmethod
     def _find_index(brief: MorningBrief, name: str):
         needle = name.upper()
         return next((item for item in brief.indices if needle in item.name.upper()), None)
@@ -724,7 +783,7 @@ class MorningFormatter:
         return MorningFormatter._compact_news_message(
             brief.global_impact_news,
             "GLOBAL MARKET NEWS",
-            include_summary=False,
+            include_summary=True,
         )
 
         # Legacy detailed renderer retained below for reference.
@@ -745,7 +804,7 @@ class MorningFormatter:
         return MorningFormatter._compact_news_message(
             brief.crypto_news,
             "CRYPTO MARKET NEWS",
-            include_summary=False,
+            include_summary=True,
         )
 
         # Legacy detailed renderer retained below for reference.

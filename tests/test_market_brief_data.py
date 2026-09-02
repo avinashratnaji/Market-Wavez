@@ -124,7 +124,9 @@ def test_india_and_global_news_use_matching_detailed_cards():
 
     assert "MARKET WAVES — INDIA MORNING BRIEF" in messages
     assert "GLOBAL MARKET NEWS" in messages
-    assert messages.count("• Summary:") == 1
+    # Both India and global stories must carry context; headline-only cards
+    # are intentionally rejected as half-information.
+    assert messages.count("• Summary:") == 2
     assert messages.count('href="https://example.com/story"') == 2
 
 

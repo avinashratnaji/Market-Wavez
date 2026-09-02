@@ -67,6 +67,8 @@ from market_sentinel.core.time import now_ist
 from market_sentinel.providers.macro_calendar import UsMacroCalendarProvider
 from market_sentinel.providers.market_leaders import MarketLeadersProvider
 from market_sentinel.providers.company_names import CompanyNameProvider
+from market_sentinel.providers.news.summary_enricher import NewsSummaryEnricher
+from market_sentinel.providers.stock_discovery import StockDiscoveryProvider
 
 
 class MorningBriefBuilder:
@@ -107,6 +109,8 @@ class MorningBriefBuilder:
         self.macro_calendar = UsMacroCalendarProvider()
         self.market_leaders = MarketLeadersProvider()
         self.company_names = CompanyNameProvider()
+        self.news_summaries = NewsSummaryEnricher()
+        self.stock_discovery = StockDiscoveryProvider()
 
     def build(self, window: str = "full") -> MorningBrief:
         """Build only the evidence used by the requested scheduled brief."""
@@ -135,32 +139,60 @@ class MorningBriefBuilder:
 
             sectors=self._safe("sector heatmap", self.sectors.fetch, []) if needs_india else [],
 
-            gainers=(self._safe("NSE gainers", lambda: self.nse_movers.fetch("gainers"), []) or self._safe("Angel gainers", self.gainers.fetch, [])) if needs_india else [],
+            # Keep a broad internal universe.  The public brief still shows
+            # only the strongest researched names, but a 40-name input can
+            # miss a high-volume catalyst that is not the day's biggest move.
+            gainers=(self._safe("NSE gainers", lambda: self.nse_movers.fetch("gainers", limit=100), []) or self._safe("Angel gainers", self.gainers.fetch, [])) if needs_india else [],
 
-            losers=(self._safe("NSE losers", lambda: self.nse_movers.fetch("losers"), []) or self._safe("Angel losers", self.losers.fetch, [])) if needs_india else [],
+            losers=(self._safe("NSE losers", lambda: self.nse_movers.fetch("losers", limit=100), []) or self._safe("Angel losers", self.losers.fetch, [])) if needs_india else [],
         )
         if needs_india:
-            self._safe("mover company names", lambda: self.company_names.enrich(brief.gainers[:5] + brief.losers[:5]), None)
+            name_pool = (
+                brief.gainers[:15] + brief.losers[:15]
+                + sorted(brief.gainers + brief.losers, key=lambda item: float(item.volume or 0), reverse=True)[:15]
+            )
+            self._safe("mover company names", lambda: self.company_names.enrich(name_pool), None)
 
         # ----------------------------------------------------
         # News
         # ----------------------------------------------------
 
+        mover_pool = (
+            brief.gainers[:10] + brief.losers[:10]
+            + sorted(brief.gainers + brief.losers, key=lambda item: float(item.volume or 0), reverse=True)[:10]
+        )
+        mover_symbols = list(dict.fromkeys(item.name for item in mover_pool))
         ranked_indian = self._unique_articles(self._safe(
             "Indian market news",
-            lambda: self.news_ranker.rank(self.news.collect(), limit=10),
+            lambda: self.news_ranker.rank(self.news.collect(mover_symbols), limit=40),
             [],
         )) if needs_morning else []
+        ranked_indian = self._safe(
+            "India news summary enrichment",
+            lambda: self.news_summaries.enrich(ranked_indian[:30], "Indian equities"),
+            ranked_indian,
+        )
         brief.indian_news = ranked_indian[:5]
         brief.indian_events = ranked_indian[5:10]
 
         # Backwards compatibility for existing consumers that read top_news.
         brief.top_news = brief.indian_news
 
-        ranked_global = self._unique_articles(self._safe("US/global market news", lambda: self.global_news.collect(limit=14), [])) if needs_night else []
+        ranked_global = self._unique_articles(self._safe("US/global market news", lambda: self.global_news.collect(limit=30), [])) if needs_night else []
+        ranked_global = self._safe(
+            "global news summary enrichment",
+            lambda: self.news_summaries.enrich(ranked_global[:30], "global equities and rates"),
+            ranked_global,
+        ) if needs_night else []
         brief.global_impact_news = ranked_global[:5]
         brief.us_events = ranked_global[5:10]
-        brief.crypto_news = self._unique_articles(self._safe("crypto market news", lambda: self.crypto_news.collect(limit=8), []))[:5] if needs_night else []
+        ranked_crypto = self._unique_articles(self._safe("crypto market news", lambda: self.crypto_news.collect(limit=24), [])) if needs_night else []
+        ranked_crypto = self._safe(
+            "crypto news summary enrichment",
+            lambda: self.news_summaries.enrich(ranked_crypto[:24], "crypto assets"),
+            ranked_crypto,
+        ) if needs_night else []
+        brief.crypto_news = ranked_crypto[:10]
         (
             brief.global_indices,
             brief.indian_adrs,
@@ -171,6 +203,55 @@ class MorningBriefBuilder:
         brief.us_losers = self._safe("US losers", lambda: self.us_movers.fetch("losers"), []) if needs_night else []
         brief.india_leaders = self._safe("India leaders", self.market_leaders.fetch_india, []) if needs_morning else []
         brief.us_mega_caps = self._safe("US mega caps", self.market_leaders.fetch_us, []) if needs_night else []
+        brief.investor_flows = self._safe("FII/DII flows", self.institutional_flows.fetch, None) if (needs_morning or needs_afternoon) else None
+        if needs_morning:
+            flow_context = ""
+            if brief.investor_flows:
+                fii = brief.investor_flows.fii_net
+                dii = brief.investor_flows.dii_net
+                if fii is not None and dii is not None:
+                    flow_context = f"Cash flow: FII {fii:+,.0f} Cr, DII {dii:+,.0f} Cr"
+            (
+                brief.today_bullish,
+                brief.today_bearish,
+                brief.week_bullish,
+                brief.week_bearish,
+                brief.growth_candidates,
+            ) = self._safe(
+                "broad NSE stock discovery",
+                lambda: self.stock_discovery.analyze(
+                    brief.gainers, brief.losers,
+                    articles=brief.indian_news + brief.indian_events,
+                    fii_dii_context=flow_context,
+                ),
+                ([], [], [], [], []),
+            )
+        if needs_night:
+            global_articles = brief.global_impact_news + brief.us_events
+            brief.us_move_reasons = self._move_reasons(
+                brief.us_mega_caps,
+                global_articles,
+                {
+                    "AAPL": ("apple",), "MSFT": ("microsoft",),
+                    "GOOGL": ("alphabet", "google"), "AMZN": ("amazon",),
+                    "NVDA": ("nvidia",), "META": ("meta platforms", "meta"),
+                    "TSLA": ("tesla",),
+                },
+            )
+            brief.crypto_move_reasons = self._move_reasons(
+                brief.crypto,
+                brief.crypto_news,
+                {
+                    "BITCOIN": ("bitcoin", " btc "),
+                    "ETHEREUM": ("ethereum", "ether", " eth "),
+                    "SOLANA": ("solana", " sol "),
+                    "XRP": ("xrp", "ripple"),
+                    "BNB": ("bnb", "binance coin", "binance"),
+                    "DOGECOIN": ("dogecoin", " doge "),
+                    "CARDANO": ("cardano", " ada "),
+                    "CHAINLINK": ("chainlink", " link "),
+                },
+            )
         brief.macro_events = self._safe("official US macro calendar", self.macro_calendar.fetch, []) if (needs_morning or needs_night) else []
         if needs_night and brief.global_indices:
             positive = sum(item.percent_change > 0 for item in brief.global_indices)
@@ -184,8 +265,6 @@ class MorningBriefBuilder:
             else:
                 brief.market_sentiment = "Neutral"
             brief.confidence = min(90, round(50 + abs(average_change) * 20))
-
-        brief.investor_flows = self._safe("FII/DII flows", self.institutional_flows.fetch, None) if needs_afternoon else None
 
         brief.top_ipos = self._safe("IPO GMP", lambda: self.ipo_gmp.fetch_top(limit=10), []) if needs_morning else []
         brief.fo_ban_symbols = self._safe("F&O ban list", self.premarket.fetch_fo_ban, []) if needs_morning else []
@@ -206,8 +285,9 @@ class MorningBriefBuilder:
         # Otherwise the narrative is built from the initial 0/Unknown values.
         if needs_india:
             brief = self._safe("market-health calculation", lambda: self.health.calculate(brief), brief)
-        if needs_morning:
-            brief.ai_summary, brief.ai_summary_source = self.summary_generator.generate(brief)
+        if needs_morning or needs_night:
+            scope = "global" if needs_night else "india"
+            brief.ai_summary, brief.ai_summary_source = self.summary_generator.generate(brief, scope=scope)
         return brief
 
     @staticmethod
@@ -286,3 +366,20 @@ class MorningBriefBuilder:
             (topic for topic, terms in topic_terms.items() if any(term in padded for term in terms)),
             "",
         )
+
+    @staticmethod
+    def _move_reasons(quotes, articles, aliases: dict[str, tuple[str, ...]]) -> dict[str, str]:
+        """Attach a reason only when a selected article explicitly names it."""
+        reasons: dict[str, str] = {}
+        for quote in quotes:
+            key = str(quote.name).upper()
+            terms = aliases.get(key, ())
+            for article in articles:
+                text = f" {article.title or ''} {article.summary or ''} ".lower()
+                if terms and any(term in text for term in terms):
+                    reason = " ".join((article.summary or article.title or "").split())
+                    if len(reason) > 155:
+                        reason = reason[:152].rsplit(" ", 1)[0] + "…"
+                    reasons[key] = reason
+                    break
+        return reasons

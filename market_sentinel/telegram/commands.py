@@ -57,6 +57,7 @@ class TelegramCommandServer:
         "nightbrief": "night",
         "indianmarkets": "indian_markets",
         "topgainersandlosers": "movers",
+        "stockresearch": "stock_research",
         "globalmarkets": "global_markets",
         "usmovers": "us_movers",
         "cryptomarkets": "crypto",
@@ -93,6 +94,7 @@ class TelegramCommandServer:
             BotCommand("whoami", "Show this chat ID for command access"),
             BotCommand("indianmarkets", "Indian indices and sector heatmap"),
             BotCommand("topgainersandlosers", "NSE cash-market movers"),
+            BotCommand("stockresearch", "Today, week and growth research candidates"),
             BotCommand("globalmarkets", "Global news and indices"),
             BotCommand("usmovers", "US market top gainers and losers"),
             BotCommand("cryptomarkets", "Crypto quotes and top crypto news"),
@@ -106,7 +108,7 @@ class TelegramCommandServer:
         await update.effective_message.reply_text(
             "Market Wavez terminal commands:\n"
             "/indianmarkets\n/topgainersandlosers\n/globalmarkets\n"
-            "/usmovers\n/cryptomarkets\n/ipos\n/fiidiiflows\n/marketbrief\n"
+            "/stockresearch\n/usmovers\n/cryptomarkets\n/ipos\n/fiidiiflows\n/marketbrief\n"
             "/morningbrief\n/afternoonbrief\n/nightbrief\n\n"
             "If a command is restricted, run /whoami and set its ID as TELEGRAM_COMMAND_CHAT_ID."
         )
