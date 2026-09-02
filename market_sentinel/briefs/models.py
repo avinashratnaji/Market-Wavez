@@ -120,6 +120,34 @@ class ExternalMarketQuote:
     source: str = "Yahoo Finance"
 
 
+@dataclass(slots=True)
+class StockResearchSignal:
+    """Explainable stock-screen result, never an execution instruction."""
+
+    symbol: str
+    company_name: str
+    price: float
+    percent_change: float
+    bias: str
+    horizon: str
+    score: int
+    reasons: tuple[str, ...]
+    source: str = "NSE + Yahoo Finance"
+    revenue_growth_yoy: float | None = None
+    earnings_improvement_yoy: float | None = None
+    research_confidence: int = 0
+    growth_score: int = 0
+    quality_score: int = 0
+    ownership_score: int = 0
+    technical_score: int = 0
+    catalyst_score: int = 0
+    risk_score: int = 0
+    key_risks: tuple[str, ...] = ()
+    data_gaps: tuple[str, ...] = ()
+    metrics: tuple[str, ...] = ()
+    report_url: str = ""
+
+
 # ==========================================================
 # Morning Brief
 # ==========================================================
@@ -196,3 +224,17 @@ class MorningBrief:
     ai_summary: str = ""
 
     ai_summary_source: str = ""
+
+    today_bullish: list[StockResearchSignal] = field(default_factory=list)
+
+    today_bearish: list[StockResearchSignal] = field(default_factory=list)
+
+    week_bullish: list[StockResearchSignal] = field(default_factory=list)
+
+    week_bearish: list[StockResearchSignal] = field(default_factory=list)
+
+    growth_candidates: list[StockResearchSignal] = field(default_factory=list)
+
+    us_move_reasons: dict[str, str] = field(default_factory=dict)
+
+    crypto_move_reasons: dict[str, str] = field(default_factory=dict)

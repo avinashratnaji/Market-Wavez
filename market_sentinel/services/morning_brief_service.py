@@ -118,6 +118,7 @@ class MorningBriefService:
         markers = {
             "indian_markets": ("INDIA MORNING BRIEF", "INDIAN MARKETS", "SECTOR HEATMAP"),
             "movers": ("TOP GAINERS",),
+            "stock_research": ("STOCKS TO RESEARCH", "HIGH-GROWTH RESEARCH"),
             "global_markets": ("GLOBAL MARKET NEWS", "GLOBAL INDICES"),
             "us_movers": ("US MARKET TOP MOVERS",),
             "crypto": ("CRYPTO MARKET NEWS", "COMMODITIES & CRYPTO"),
@@ -132,30 +133,45 @@ class MorningBriefService:
 
     @staticmethod
     def _source_messages(brief, window: str, section: str = "full") -> list[str]:
-        """Preserve source verification without duplicating image headlines."""
+        """Send useful linked context alongside visual cards, not a source-only list."""
         section = (section or "full").lower()
         if window == "morning" and section == "full":
-            groups = (("INDIA NEWS SOURCES", brief.indian_news or brief.top_news),)
+            groups = (("INDIA MARKET CATALYSTS", (brief.indian_news or brief.top_news) + brief.indian_events),)
+        elif window == "morning" and section == "indian_markets":
+            groups = (("INDIA MARKET CATALYSTS", (brief.indian_news or brief.top_news) + brief.indian_events),)
         elif window == "night" and section == "full":
             groups = (
-                ("GLOBAL NEWS SOURCES", brief.global_impact_news),
-                ("CRYPTO NEWS SOURCES", brief.crypto_news),
+                ("GLOBAL MARKET NEWS", brief.global_impact_news + brief.us_events),
+                ("CRYPTO MARKET NEWS", brief.crypto_news),
             )
         elif window == "night" and section == "global_markets":
-            groups = (("GLOBAL NEWS SOURCES", brief.global_impact_news),)
+            groups = (("GLOBAL MARKET NEWS", brief.global_impact_news + brief.us_events),)
         elif window == "night" and section == "crypto":
-            groups = (("CRYPTO NEWS SOURCES", brief.crypto_news),)
+            groups = (("CRYPTO MARKET NEWS", brief.crypto_news),)
         else:
             groups = ()
-        lines: list[str] = []
+
+        messages: list[str] = []
         for title, articles in groups:
-            links = []
-            for number, article in enumerate(articles[:5], 1):
-                source = escape((article.source or "Source").strip())
-                if article.url:
-                    source = f'<a href="{escape(article.url, quote=True)}">{source}</a>'
-                links.append(f"{number}. {source}")
-            if links:
-                lines.extend((f"🔗 <b>{title}</b>", " · ".join(links), ""))
-        lines.append("<i>Market data is informational research, not investment advice.</i>")
-        return ["\n".join(lines)]
+            selected = list(articles[:10])
+            for page_start in range(0, len(selected), 5):
+                page = selected[page_start:page_start + 5]
+                page_number = page_start // 5 + 1
+                page_total = (len(selected) + 4) // 5
+                lines = [f"📰 <b>{title}" + (f" · {page_number}/{page_total}" if page_total > 1 else "") + "</b>", ""]
+                for number, article in enumerate(page, page_start + 1):
+                    source = escape((article.source or "Source").strip())
+                    if article.url:
+                        source = f'<a href="{escape(article.url, quote=True)}">{source}</a>'
+                    summary = MorningFormatter._compact_summary(article)
+                    if len(summary) > 260:
+                        summary = summary[:257].rsplit(" ", 1)[0] + "…"
+                    lines.append(f"<b>{number}. {escape(article.title or 'Market update')}</b>")
+                    if summary:
+                        lines.append(f"• {escape(summary)}")
+                    lines.extend((f"↗ {source}", ""))
+                lines.append("<i>Verified context for research; not investment advice.</i>")
+                messages.append("\n".join(lines))
+        if not messages:
+            messages.append("<i>Market data is informational research, not investment advice.</i>")
+        return messages

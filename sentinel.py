@@ -173,7 +173,7 @@ def main():
     )
     telegram_parser.add_argument(
         "--section",
-        choices=("full", "indian_markets", "movers", "global_markets", "us_movers", "crypto", "ipos", "flows"),
+        choices=("full", "indian_markets", "movers", "stock_research", "global_markets", "us_movers", "crypto", "ipos", "flows"),
         default="full",
         help="Send one live terminal panel instead of the full brief",
     )

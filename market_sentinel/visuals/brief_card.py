@@ -50,11 +50,15 @@ class BriefCardRenderer:
         specs = self._specs(brief, window)
         if section != "full":
             allowed = {
-                "indian_markets": {"premarket", "postmarket", "heatmap", "india-stocks"},
+                "indian_markets": {
+                    "premarket", "postmarket", "heatmap", "india-stocks",
+                    "india-news-1", "india-news-2",
+                },
                 "movers": {"india-movers"},
-                "global_markets": {"global-indices", "global-news", "macro"},
+                "stock_research": {"stocks-today", "stocks-week", "growth"},
+                "global_markets": {"global-indices", "global-news-1", "global-news-2", "macro", "mag-seven"},
                 "us_movers": {"us-movers"},
-                "crypto": {"crypto-market", "crypto-news", "commodities"},
+                "crypto": {"crypto-market", "crypto-news-1", "crypto-news-2", "commodities"},
                 "ipos": {"ipos"},
                 "flows": {"flows"},
             }.get(section, set())
@@ -71,8 +75,12 @@ class BriefCardRenderer:
             specs = [
                 CardSpec("premarket", "INDIA PRE-MARKET", "premarket", "premarket"),
                 CardSpec("summary", "AI-GROUNDED MARKET READ", "summary", "summary"),
-                CardSpec("india-news", "INDIA MARKET CATALYSTS", "india_news", "india_news"),
+                CardSpec("india-news-1", "INDIA CATALYSTS · 1/2", "india_news", "india_news_1"),
+                CardSpec("india-news-2", "INDIA CATALYSTS · 2/2", "india_news", "india_news_2"),
                 CardSpec("macro", "FED & MACRO WATCH", "summary", "macro"),
+                CardSpec("stocks-today", "STOCKS TO RESEARCH · TODAY", "movers", "today_signals"),
+                CardSpec("stocks-week", "STOCKS TO RESEARCH · THIS WEEK", "movers", "week_signals"),
+                CardSpec("growth", "HIGH-GROWTH RESEARCH CANDIDATES", "summary", "growth_signals"),
                 CardSpec("options", "TOP 5 F&O RESEARCH RADAR", "options", "options"),
                 CardSpec("ipos", "OPEN IPOs · GMP WATCH", "ipo", "ipos"),
                 CardSpec("india-stocks", "INDIA LARGE-CAP WATCH", "movers", "india_leaders"),
@@ -86,14 +94,17 @@ class BriefCardRenderer:
             ]
         elif window == "night":
             specs = [
+                CardSpec("summary", "GLOBAL MARKET READ", "summary", "summary"),
                 CardSpec("global-indices", "GLOBAL INDICES", "global_crypto", "global_indices"),
                 CardSpec("macro", "FED & MACRO WATCH", "summary", "macro"),
-                CardSpec("global-news", "GLOBAL MARKET NEWS", "global_news", "global_news"),
+                CardSpec("global-news-1", "GLOBAL MARKET NEWS · 1/2", "global_news", "global_news_1"),
+                CardSpec("global-news-2", "GLOBAL MARKET NEWS · 2/2", "global_news", "global_news_2"),
                 CardSpec("mag-seven", "MAGNIFICENT SEVEN", "movers", "us_leaders"),
                 CardSpec("us-movers", "US TOP MOVERS", "us_movers", "us_movers"),
                 CardSpec("commodities", "COMMODITIES", "postmarket", "commodities"),
                 CardSpec("crypto-market", "CRYPTO MARKETS", "global_crypto", "crypto"),
-                CardSpec("crypto-news", "CRYPTO MARKET NEWS", "crypto_news", "crypto_news"),
+                CardSpec("crypto-news-1", "CRYPTO MARKET NEWS · 1/2", "crypto_news", "crypto_news_1"),
+                CardSpec("crypto-news-2", "CRYPTO MARKET NEWS · 2/2", "crypto_news", "crypto_news_2"),
             ]
         else:
             specs = [CardSpec("summary", "MARKET INTELLIGENCE", "summary", "summary")]
@@ -104,9 +115,12 @@ class BriefCardRenderer:
         checks = {
             "premarket": brief.indices or brief.gift_nifty,
             "postmarket": brief.indices,
-            "india_news": brief.indian_news or brief.top_news,
-            "global_news": brief.global_impact_news,
-            "crypto_news": brief.crypto_news,
+            "india_news_1": brief.indian_news or brief.top_news,
+            "india_news_2": brief.indian_events,
+            "global_news_1": brief.global_impact_news,
+            "global_news_2": brief.us_events,
+            "crypto_news_1": brief.crypto_news[:5],
+            "crypto_news_2": brief.crypto_news[5:10],
             "macro": brief.macro_events,
             "options": brief.option_research,
             "ipos": brief.top_ipos,
@@ -120,6 +134,9 @@ class BriefCardRenderer:
             "commodities": brief.commodities,
             "crypto": brief.crypto,
             "summary": brief.ai_summary,
+            "today_signals": brief.today_bullish or brief.today_bearish,
+            "week_signals": brief.week_bullish or brief.week_bearish,
+            "growth_signals": brief.growth_candidates,
         }
         return bool(checks.get(kind))
 
@@ -131,7 +148,7 @@ class BriefCardRenderer:
         kind = spec.kind
         if kind in {"premarket", "postmarket", "global_indices", "india_leaders", "us_leaders", "commodities", "crypto"}:
             self._draw_quote_card(draw, brief, kind)
-        elif kind in {"india_news", "global_news", "crypto_news"}:
+        elif kind.startswith(("india_news_", "global_news_", "crypto_news_")):
             self._draw_news(draw, brief, kind)
         elif kind == "macro":
             self._draw_macro(draw, brief)
@@ -143,6 +160,8 @@ class BriefCardRenderer:
             self._draw_heatmap(draw, brief)
         elif kind in {"india_movers", "us_movers"}:
             self._draw_movers(draw, brief, kind)
+        elif kind in {"today_signals", "week_signals", "growth_signals"}:
+            self._draw_stock_signals(draw, brief, kind)
         elif kind == "flows":
             self._draw_flows(draw, brief)
         else:
@@ -208,7 +227,11 @@ class BriefCardRenderer:
             if volatility:
                 self._quote_rows(draw, volatility[:2], y + 18, "VOLATILITY")
         else:
-            self._quote_rows(draw, quotes[:10], y)
+            y = self._quote_rows(draw, quotes[:8] if kind == "crypto" else quotes[:10], y)
+            if kind == "us_leaders":
+                self._draw_move_reasons(draw, quotes, brief.us_move_reasons, y + 15, "WHY THE BIG MOVES")
+            elif kind == "crypto":
+                self._draw_move_reasons(draw, quotes, brief.crypto_move_reasons, y + 15, "VERIFIED MARKET DRIVERS", limit=4)
 
     def _quote_rows(self, draw, quotes, y: int, label: str = "") -> int:
         if label:
@@ -232,20 +255,82 @@ class BriefCardRenderer:
         return y
 
     def _draw_news(self, draw, brief, kind):
-        articles = {"india_news": brief.indian_news or brief.top_news, "global_news": brief.global_impact_news, "crypto_news": brief.crypto_news}[kind][:5]
-        y = 235
+        articles = {
+            "india_news_1": brief.indian_news or brief.top_news,
+            "india_news_2": brief.indian_events,
+            "global_news_1": brief.global_impact_news,
+            "global_news_2": brief.us_events,
+            "crypto_news_1": brief.crypto_news[:5],
+            "crypto_news_2": brief.crypto_news[5:10],
+        }[kind][:5]
+        y = 226
         for number, article in enumerate(articles, 1):
             source = (article.source or "Verified source").strip()
             title = " ".join((article.title or "Market update").split())
-            wrapped = textwrap.wrap(title, width=53)[:2]
-            self._text(draw, (80, y), f"{number:02d}", 27, self.ACCENT, bold=True)
+            wrapped = textwrap.wrap(title, width=63)[:2]
+            self._text(draw, (80, y), f"{number:02d}", 24, self.ACCENT, bold=True)
             for line_number, line in enumerate(wrapped):
-                self._text(draw, (135, y + line_number * 37), line, 28, self.WHITE, bold=True)
-            source_y = y + max(1, len(wrapped)) * 37 + 7
-            self._text(draw, (135, source_y), source, 21, self.MUTED)
-            y = source_y + 57
+                self._text(draw, (132, y + line_number * 31), line, 23, self.WHITE, bold=True)
+            summary_y = y + max(1, len(wrapped)) * 31 + 7
+            summary = " ".join((article.summary or "").split())
+            for line_number, line in enumerate(textwrap.wrap(summary, width=77)[:2]):
+                self._text(draw, (132, summary_y + line_number * 27), line, 20, self.MUTED)
+            source_y = summary_y + 58
+            self._text(draw, (132, source_y), f"Source · {source}", 18, self.ACCENT)
+            y = source_y + 52
             if y > 1145:
                 break
+
+    def _draw_move_reasons(self, draw, quotes, reasons: dict[str, str], y: int, title: str, limit: int = 3):
+        self._text(draw, (80, y), title, 20, self.ACCENT, bold=True)
+        y += 40
+        selected = sorted(quotes, key=lambda item: abs(float(item.percent_change)), reverse=True)[:limit]
+        for quote in selected:
+            reason = reasons.get(str(quote.name).upper())
+            if not reason:
+                reason = (
+                    "No asset-specific catalyst was verified; treat the move as broad-market context, not a confirmed cause."
+                    if "MARKET DRIVERS" in title else
+                    "No company-specific catalyst was verified in the selected news set."
+                )
+            self._text(draw, (90, y), str(quote.name), 21, self.WHITE, bold=True)
+            for index, line in enumerate(textwrap.wrap(reason, width=72)[:2]):
+                self._text(draw, (215, y + index * 26), line, 19, self.MUTED)
+            y += 72
+
+    def _draw_stock_signals(self, draw, brief, kind):
+        if kind == "today_signals":
+            groups = (("BULLISH EVIDENCE", brief.today_bullish, self.GREEN), ("BEARISH EVIDENCE", brief.today_bearish, self.RED))
+        elif kind == "week_signals":
+            groups = (("BULLISH TREND", brief.week_bullish, self.GREEN), ("BEARISH TREND", brief.week_bearish, self.RED))
+        else:
+            groups = (("REVENUE + EARNINGS + TREND", brief.growth_candidates, self.ACCENT),)
+        # Do not spend half a card on an empty opposing bucket.  A short list
+        # should have room for the evidence actually available.
+        groups = tuple(group for group in groups if group[1])
+        y = 226
+        per_group = 3 if len(groups) == 2 else 5
+        for heading, signals, colour in groups:
+            self._text(draw, (80, y), heading, 20, colour, bold=True)
+            y += 42
+            for signal in signals[:per_group]:
+                label = f"{signal.symbol} · {signal.company_name}"
+                self._text(draw, (95, y), textwrap.shorten(label, width=42, placeholder="…"), 24, self.WHITE, bold=True)
+                self._text(draw, (985, y), f"{signal.score}/100", 23, colour, bold=True, anchor="ra")
+                breakdown = (
+                    f"Evidence {signal.research_confidence}% · Growth {signal.growth_score}/26 · "
+                    f"Quality {signal.quality_score}/24 · Ownership {signal.ownership_score}/10 · "
+                    f"Technical {signal.technical_score}/15"
+                )
+                self._text(draw, (95, y + 33), textwrap.shorten(breakdown, width=92, placeholder="…"), 17, self.ACCENT)
+                reason = " · ".join(signal.reasons[:2])
+                self._text(draw, (95, y + 58), textwrap.shorten(reason, width=91, placeholder="…"), 18, self.MUTED)
+                if signal.key_risks:
+                    risk = textwrap.shorten(signal.key_risks[0].replace("Event risk: ", ""), width=88, placeholder="…")
+                    self._text(draw, (95, y + 82), f"Risk · {risk}", 17, self.RED)
+                y += 122
+            y += 18
+        self._text(draw, (80, 1155), "Research shortlist · verify price, event risk and liquidity before acting", 18, self.AMBER)
 
     def _draw_macro(self, draw, brief):
         y = 238

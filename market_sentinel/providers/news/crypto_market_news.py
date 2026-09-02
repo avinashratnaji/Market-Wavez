@@ -55,7 +55,7 @@ class CryptoMarketNews:
         source_counts: Counter[str] = Counter()
         for article in portfolio:
             source = (article.source or "Unknown").strip().lower()
-            if source_counts[source] >= 2:
+            if source_counts[source] >= 3:
                 continue
             output.append(article)
             source_counts[source] += 1
