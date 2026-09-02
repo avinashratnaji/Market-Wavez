@@ -548,6 +548,10 @@ class MorningFormatter:
             ]
             if brief.indian_events:
                 messages.append("\n".join(MorningFormatter._compact_news_message(brief.indian_events, "ADDITIONAL INDIA MARKET EVENTS")))
+            if brief.macro_events:
+                messages.append("\n".join(MorningFormatter._macro_calendar_message(brief)))
+            if brief.india_leaders:
+                messages.append("\n".join(MorningFormatter._leaders_message(brief.india_leaders, "INDIA LARGE-CAP WATCH", "🇮🇳")))
             if brief.option_research or brief.option_research_failures:
                 messages.extend(DailyOptionsRadarService.format_messages(brief.option_research, brief.option_research_failures))
             messages.extend(message for message in MorningFormatter.format(brief) if "CURRENT OPEN IPOs" in message)
@@ -567,6 +571,10 @@ class MorningFormatter:
             ]
             if brief.us_events:
                 messages.insert(2, "\n".join(MorningFormatter._compact_news_message(brief.us_events, "ADDITIONAL US MARKET EVENTS", include_summary=False)))
+            if brief.macro_events:
+                messages.insert(3, "\n".join(MorningFormatter._macro_calendar_message(brief)))
+            if brief.us_mega_caps:
+                messages.insert(-1, "\n".join(MorningFormatter._leaders_message(brief.us_mega_caps, "MAGNIFICENT SEVEN", "🇺🇸")))
             return messages
         raise ValueError(f"Unknown briefing window: {window}")
 
@@ -596,7 +604,7 @@ class MorningFormatter:
             f"📅 {brief.generated_at:%d %b %Y} | ⏰ {brief.generated_at:%I:%M %p} IST",
             "",
             f"📊 <b>Market Health:</b> {health_icon} <code>{brief.health_score}/100</code> <b>{health}</b>",
-            f"🧠 <b>Sentiment:</b> {escape(sentiment)} ({brief.confidence}% confidence)",
+            f"{MorningFormatter._sentiment_animal(sentiment)} <b>Sentiment:</b> {escape(sentiment)} ({brief.confidence}% confidence) {MorningFormatter._sentiment_emoji(sentiment)}",
             "",
             "🚨 <b>PRE-MARKET INDICATORS</b>",
             MorningFormatter.LINE,
@@ -661,7 +669,8 @@ class MorningFormatter:
                 summary = MorningFormatter._compact_summary(article)
                 if len(summary) > 240:
                     summary = summary[:237].rsplit(" ", 1)[0] + "…"
-                lines.append(f"   • Summary: {escape(summary)}")
+                if summary:
+                    lines.append(f"   • Summary: {escape(summary)}")
             lines.extend((f"   • Source: {source}", ""))
         return lines if len(lines) > 3 else lines + ["No major market-moving stories were verified."]
 
@@ -778,7 +787,37 @@ class MorningFormatter:
     def _us_mover_row(quote, direction: str) -> str:
         icon = "📈" if direction == "up" else "📉"
         arrow = "▲" if direction == "up" else "▼"
-        return f"{icon} <b>{escape(quote.name)}</b> = ${quote.value:,.2f} ({arrow} {abs(quote.percent_change):.2f}%)"
+        company = f" · {escape(quote.note)}" if quote.note else ""
+        return f"{icon} <b>{escape(quote.name)}</b>{company} = ${quote.value:,.2f} ({arrow} {abs(quote.percent_change):.2f}%)"
+
+    @staticmethod
+    def _leaders_message(quotes, title: str, flag: str) -> list[str]:
+        lines = [MorningFormatter.LINE, f"{flag} <b>{title}</b>", MorningFormatter.LINE]
+        for quote in quotes:
+            arrow = "▲" if quote.percent_change >= 0 else "▼"
+            icon = "🟢" if quote.percent_change > 0.15 else "🔴" if quote.percent_change < -0.15 else "🟡"
+            currency = "₹" if quote.unit.startswith("₹") else "$"
+            company = f" · {escape(quote.note)}" if quote.note else ""
+            lines.append(
+                f"{icon} <b>{escape(quote.name)}</b>{company} = {currency}{quote.value:,.2f} "
+                f"({arrow} {abs(quote.percent_change):.2f}%)"
+            )
+        return lines
+
+    @staticmethod
+    def _macro_calendar_message(brief: MorningBrief) -> list[str]:
+        lines = [MorningFormatter.LINE, "🗓 <b>FED & MACRO RISK CALENDAR</b>", MorningFormatter.LINE]
+        for event in brief.macro_events[:5]:
+            source = escape(event.source)
+            if event.url:
+                source = f'<a href="{escape(event.url, quote=True)}">{source}</a>'
+            lines.extend((
+                f"🔴 <b>{event.starts_at:%d %b} — {escape(event.name)}</b>",
+                f"   {escape(event.why_it_matters)}",
+                f"   Source: {source}",
+                "",
+            ))
+        return lines
 
     @staticmethod
     def _quote_line(quote, include_note: bool = True) -> str:
@@ -805,7 +844,7 @@ class MorningFormatter:
         if title and lowered.startswith(title):
             summary = summary[len(article.title or ""):].lstrip(" -:|–—.")
         if not summary or summary.lower() == title:
-            return "No additional publisher summary was supplied."
+            return ""
         return summary
 
     @staticmethod
@@ -1036,8 +1075,10 @@ class MorningFormatter:
         change = stock.percent_change
         icon = "📈" if direction == "up" else "📉"
         arrow = "▲" if direction == "up" else "▼"
-        name = MorningFormatter._short_stock_name(stock.name)
-        return f"{icon} <b>{escape(name)}</b> = ₹{stock.value:,.2f} ({arrow} {abs(change):.2f}%)"
+        ticker = MorningFormatter._short_stock_name(stock.name)
+        company_name = getattr(stock, "company_name", "") or ""
+        company = f" · {escape(company_name)}" if company_name and company_name.upper() != ticker.upper() else ""
+        return f"{icon} <b>{escape(ticker)}</b>{company} = ₹{stock.value:,.2f} ({arrow} {abs(change):.2f}%)"
 
     # ==========================================================
     # SHORT INDEX NAMES

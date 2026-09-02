@@ -38,6 +38,7 @@ data/cache/
 data/history/
 data/snapshots/
 data/instruments/
+data/generated/
 
 # ==================================================
 # Reports

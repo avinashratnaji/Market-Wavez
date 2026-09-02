@@ -188,7 +188,7 @@ def main():
 
     options_parser = sub.add_parser(
         "option-radar",
-        help="Run the private ten-stock EOD option-chain research radar",
+        help="Run the five-stock EOD option-chain research radar",
     )
     options_parser.add_argument(
         "--send",

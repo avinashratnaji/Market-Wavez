@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from collections import Counter
 
 from market_sentinel.news.models import NewsArticle
 from market_sentinel.providers.news.news_intelligence import NewsPortfolioSelector
@@ -49,7 +50,20 @@ class CryptoMarketNews:
             article.score = min(100, points + (16 if age <= 6 else 8) + 20)
             selected.append(article)
         selected.sort(key=lambda item: (item.score, item.published_at or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
-        return NewsPortfolioSelector().select(selected, limit=limit)
+        portfolio = NewsPortfolioSelector().select(selected, limit=max(limit * 3, limit))
+        output: list[NewsArticle] = []
+        source_counts: Counter[str] = Counter()
+        for article in portfolio:
+            source = (article.source or "Unknown").strip().lower()
+            if source_counts[source] >= 2:
+                continue
+            output.append(article)
+            source_counts[source] += 1
+            if len(output) == limit:
+                return output
+        # Do not manufacture variety by repeating a single publisher merely
+        # to hit the requested count.
+        return output[:limit]
 
     @staticmethod
     def _age_hours(article: NewsArticle) -> float | None:

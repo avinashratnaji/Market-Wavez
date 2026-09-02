@@ -88,7 +88,7 @@ class TelegramCommandServer:
         await application.bot.set_my_commands([
             BotCommand("marketbrief", "Full live market brief"),
             BotCommand("morningbrief", "Indian pre-market brief"),
-            BotCommand("afternoonbrief", "Post-market, flows and IPOs"),
+            BotCommand("afternoonbrief", "Post-market and institutional flows"),
             BotCommand("nightbrief", "Global markets and crypto brief"),
             BotCommand("whoami", "Show this chat ID for command access"),
             BotCommand("indianmarkets", "Indian indices and sector heatmap"),
@@ -96,7 +96,7 @@ class TelegramCommandServer:
             BotCommand("globalmarkets", "Global news and indices"),
             BotCommand("usmovers", "US market top gainers and losers"),
             BotCommand("cryptomarkets", "Crypto quotes and top crypto news"),
-            BotCommand("ipos", "Open IPOs ranked by GMP"),
+            BotCommand("ipos", "Morning open IPOs ranked by GMP"),
             BotCommand("fiidiiflows", "FII/FPI and DII cash-market flows"),
         ])
 

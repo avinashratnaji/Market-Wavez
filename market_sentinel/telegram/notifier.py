@@ -35,6 +35,8 @@ class TelegramNotifier:
         self,
         messages: list[str],
         sticker_id: str | None = None,
+        image_path: str | None = None,
+        image_paths: list[str] | None = None,
     ) -> None:
         """
         Send the complete Morning Brief using one event loop.
@@ -52,7 +54,11 @@ class TelegramNotifier:
         # STICKER
         # --------------------------------------------------
 
-        if sticker_id:
+        cards = list(image_paths or ([] if image_path is None else [image_path]))
+        for card in cards:
+            await self.bot.send_photo(card)
+
+        if sticker_id and not cards:
 
             await self.bot.send_sticker(
                 sticker_id
@@ -105,6 +111,8 @@ class TelegramNotifier:
         self,
         messages: list[str],
         sticker_id: str | None = None,
+        image_path: str | None = None,
+        image_paths: list[str] | None = None,
     ) -> None:
         """
         Send the complete Morning Brief.
@@ -112,7 +120,7 @@ class TelegramNotifier:
         Everything happens inside ONE event loop.
         """
 
-        if not messages and not sticker_id:
+        if not messages and not sticker_id and not image_path and not image_paths:
 
             logger.info(
                 "Nothing to send."
@@ -126,6 +134,8 @@ class TelegramNotifier:
                 self._send_brief_async(
                     messages=messages,
                     sticker_id=sticker_id,
+                    image_path=image_path,
+                    image_paths=image_paths,
                 )
             )
 

@@ -102,3 +102,5 @@ DEFAULT_OPTIONS_WATCHLIST: tuple[WatchlistItem, ...] = (
     WatchlistItem("AXISBANK", "Axis Bank", "AXISBANK.NS", "AXISBANK"),
     WatchlistItem("HEROMOTOCO", "Hero MotoCorp", "HEROMOTOCO.NS", "HEROMOTOCO"),
 )
+
+FALLBACK_LIQUID_OPTIONS_UNIVERSE: tuple[WatchlistItem, ...] = DEFAULT_OPTIONS_WATCHLIST[:5]

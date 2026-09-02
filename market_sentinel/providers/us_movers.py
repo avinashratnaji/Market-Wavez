@@ -37,6 +37,7 @@ class UsMarketMoversProvider:
                     value=float(price),
                     percent_change=float(change),
                     unit="$",
+                    note=str(row.get("longName") or row.get("shortName") or "").strip(),
                     source="Yahoo Finance",
                 ))
             return output[:limit]
